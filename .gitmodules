@@ -1,0 +1,9 @@
+[submodule "dmlc-core"]
+	path = dmlc-core
+	url = https://github.com/dmlc/dmlc-core.git
+[submodule "nnvm"]
+	path = nnvm
+	url = https://github.com/dmlc/nnvm.git
+[submodule "tvm"]
+	path = tvm
+	url = https://github.com/dmlc/tvm.git

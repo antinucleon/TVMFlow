@@ -47,11 +47,56 @@ Array<Tensor> ComputeNop(const NodeAttrs& attrs, const Array<Tensor>& inputs) { 
 
 ///////////////// TensorOp
 
-Array<Tensor> ComputeZero(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+Array<Tensor> ComputeZeros(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
   static const PackedFunc& pf = GetPackedFunc("tvm_graph.tensor.zeros");
   CHECK_EQ(inputs.size(), 0U);
   const std::string& shape = attrs.dict.at("shape");
   Tensor ret = pf(shape);
+  return {ret};
+}
+
+Array<Tensor> ComputeZerosLike(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.tensor.zeros_like");
+  CHECK_EQ(inputs.size(), 1U);
+  Tensor ret = pf(inputs[0]);
+  return {ret};
+}
+
+Array<Tensor> ComputeOnes(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.tensor.ones");
+  CHECK_EQ(inputs.size(), 0U);
+  const std::string& shape = attrs.dict.at("shape");
+  Tensor ret = pf(shape);
+  return {ret};
+}
+
+Array<Tensor> ComputeOnesLike(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.tensor.ones_like");
+  CHECK_EQ(inputs.size(), 1U);
+  Tensor ret = pf(inputs[0]);
+  return {ret};
+}
+
+Array<Tensor> ComputeNormal(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.tensor.normal");
+  CHECK_EQ(inputs.size(), 0U);
+  const std::string& shape = attrs.dict.at("shape");
+  std::string loc = "0.0";
+  std::string scale = "1.0";
+  if (attrs.dict.find("loc") != attrs.dict.end()) {
+    loc = attrs.dict.at("loc");
+  }
+  if (attrs.dict.find("scale") != attrs.dict.end()) {
+    loc = attrs.dict.at("scale");
+  }
+  Tensor ret = pf(shape, loc, scale);
+  return {ret};
+}
+
+Array<Tensor> ComputeEqual(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.equal");
+  CHECK_EQ(inputs.size(), 2U);
+  Tensor ret = pf(inputs[0], inputs[1]);
   return {ret};
 }
 

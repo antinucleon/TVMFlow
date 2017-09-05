@@ -19,9 +19,9 @@ NNVM_REGISTER_OP(placeholder)
     .set_num_inputs(0)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeNop);
 
-NNVM_REGISTER_OP(__add_symbol__)
-    .set_attr<FTVMCompute>("FTVMCompute", ComputeAdd)
-    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleEWise);
+// NNVM_REGISTER_OP(__add_symbol__)
+//     .set_attr<FTVMCompute>("FTVMCompute", ComputeAdd)
+//    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleEWise);
 
 NNVM_REGISTER_OP(exp)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeExp)
@@ -55,7 +55,7 @@ NNVM_REGISTER_OP(_no_gradient).describe("Special op indicating no gradient").set
 
 ////////////////////////// Tensor OP
 NNVM_REGISTER_OP(zeros)
-    .set_attr<FTVMCompute>("FTVMCompute", ComputeZero)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeZeros)
     .set_num_inputs(0)
     .set_num_outputs(1)
     .set_attr<int>("TOpPattern", kExtern)
@@ -63,4 +63,58 @@ NNVM_REGISTER_OP(zeros)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleExtern)
     .set_attr<FInferShape>("FInferShape", NodeShape);
 
+NNVM_REGISTER_OP(zeros_like)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeZerosLike)
+    .set_num_inputs(1)
+    .set_num_outputs(1)
+    .set_attr<int>("TOpPattern", kExtern)
+    .set_attr<FInferType>("FInferType", SameType)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleExtern)
+    .set_attr<FInferShape>("FInferShape", SameShape);
+
+NNVM_REGISTER_OP(ones)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeOnes)
+    .set_num_inputs(0)
+    .set_num_outputs(1)
+    .set_attr<int>("TOpPattern", kExtern)
+    .set_attr<FInferType>("FInferType", NodeType)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleExtern)
+    .set_attr<FInferShape>("FInferShape", NodeShape);
+
+NNVM_REGISTER_OP(ones_like)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeOnesLike)
+    .set_num_inputs(1)
+    .set_num_outputs(1)
+    .set_attr<int>("TOpPattern", kExtern)
+    .set_attr<FInferType>("FInferType", SameType)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleExtern)
+    .set_attr<FInferShape>("FInferShape", SameShape);
+
+NNVM_REGISTER_OP(normal)
+    .describe("normal distribution")
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeNormal)
+    .set_num_inputs(0)
+    .set_num_outputs(1)
+    .set_attr<int>("TOpPattern", kExtern)
+    .set_attr<FInferType>("FInferType", NodeType)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleExtern)
+    .set_attr<FInferShape>("FInferShape", NodeShape);
+
+NNVM_REGISTER_OP(equal)
+    .set_num_inputs(2)
+    .set_num_outputs(1)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeEqual)
+    .set_attr<FInferShape>("FInferShape", SameShape)
+    .set_attr<int>("TOpPattern", kElemWise)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleEWise);
+
+NNVM_REGISTER_OP(__add_symbol__)
+    .describe("add two data together")
+    .set_num_inputs(2)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeAdd)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleEWise)
+    .set_attr<FInplaceOption>("FInplaceOption", InplaceIn0Out0)
+    .set_attr<FGradient>("FGradient", [](const NodePtr& n, const std::vector<NodeEntry>& ograds) {
+      return std::vector<NodeEntry>{ograds[0], ograds[0]};
+    });
 }  // namespace tvmflow

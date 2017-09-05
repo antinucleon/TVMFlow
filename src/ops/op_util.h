@@ -65,6 +65,14 @@ inline bool NodeType(const NodeAttrs& attrs, std::vector<int>* itype, std::vecto
   otype->at(0) = atoi(attrs.dict.at("dtype").c_str());
   return true;
 }
+
+inline bool SameType(const NodeAttrs& attrs, std::vector<int>* itype, std::vector<int>* otype) {
+  CHECK_EQ(itype->size(), otype->size());
+  for (size_t i = 0; i < itype->size(); ++i) {
+    otype->at(i) = itype->at(i);
+  }
+  return true;
+}
 // simply return the shape as same
 inline bool SameShape(const NodeAttrs& attrs, std::vector<TShape>* ishape,
                       std::vector<TShape>* oshape) {

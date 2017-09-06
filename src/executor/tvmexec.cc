@@ -312,11 +312,11 @@ void TVMExecutor::SetupShapeDType(const std::unordered_map<std::string, DLTensor
   CHECK_EQ(graph_.GetAttr<size_t>("dtype_num_unknown_nodes"), 0)
       << "Type information in the graph is in-complete";
 
-  LOG(INFO) << "Compile the graph into execution code.";
+  // LOG(INFO) << "Compile the graph into execution code.";
   graph_ = ApplyPasses(std::move(graph_), {"GraphPartition", "GraphFuse"});
   auto func = tvm::runtime::Registry::Get("tvm_graph._get_module_from_graph");
   module_ = (*func)(&graph_);
-  LOG(INFO) << "Compile finish.";
+  // LOG(INFO) << "Compile finish.";
   node_shape_ = &(graph_.GetAttr<nnvm::ShapeVector>("shape"));
   node_dtype_ = &(graph_.GetAttr<nnvm::DTypeVector>("dtype"));
   ClearAuxiliaryMembers();

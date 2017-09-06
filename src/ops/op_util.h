@@ -41,6 +41,7 @@ inline bool NodeShape(const NodeAttrs& attrs, std::vector<TShape>* ishape,
   for (TShape& pshape : *oshape) {
     SHAPE_ASSIGN(pshape, def_v);
   }
+  return true;
 }
 
 inline bool AssignType(const NodeAttrs& attrs, std::vector<int>* itype, std::vector<int>* otype) {
@@ -159,6 +160,15 @@ inline std::vector<NodeEntry> MakeBackwardGrads(
   }
   return ret;
 }
+
+struct ReduceParam : public dmlc::Parameter<ReduceParam> {
+  Tuple<int> reduction_indices;
+  bool keepdims;
+  DMLC_DECLARE_PARAMETER(ReduceParam) {
+    DMLC_DECLARE_FIELD(reduction_indices).set_default(Tuple<int>());
+    DMLC_DECLARE_FIELD(keepdims).set_default(false);
+  }
+};
 
 // special parameter stored in backward node.
 struct NNBackwardParam {

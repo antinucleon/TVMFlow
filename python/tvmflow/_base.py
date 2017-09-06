@@ -19,15 +19,16 @@ if hasattr(__builtin__, "NNVM_LIBRARY_NAME"):
 else:
     __builtin__.NNVM_LIBRARY_NAME = "libtvmflow"
 
-
 import ctypes as _ctypes
 from ._nnvm.name import NameManager
 from ._nnvm._base import c_str, check_call, _LIB
 from ._nnvm import symbol, graph
 from ._nnvm import _symbol_internal
 
-__all__ = ["float32", "placeholder", "Variable", "group",
-           "initialize_all_variables", "gradients"]
+__all__ = [
+    "float32", "placeholder", "Variable", "group", "initialize_all_variables",
+    "gradients"
+]
 
 # data type table
 float32 = 0
@@ -62,9 +63,7 @@ def placeholder(dtype, shape=None, name=None):
 
 
 def group(*inputs):
-    x = _symbol_internal._nop()
-    x._add_control_deps(symbol.Group(inputs))
-    return x
+    return symbol.Group(inputs)
 
 
 def gradients(ys, xs, grad_ys=None):

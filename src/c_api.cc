@@ -70,15 +70,16 @@ int NNSessionRun(SessionHandle handle, SymbolHandle graph, nn_uint num_feed,
                  const int64_t*** out_shape_data) {
   API_BEGIN();
   std::unordered_map<std::string, DLTensor> feed;
+  std::vector<TShape> tmp_ishape(num_feed);
   for (nn_uint i = 0; i < num_feed; ++i) {
     const std::string& key =
         static_cast<nnvm::Symbol*>(feed_placeholders[i])->outputs[0].node->attrs.name;
     DLTensor tmp;
     tmp.data = (void*)feed_dptr[i];  // NOLINT(*)
-    auto shape = TShape(feed_shape_data + feed_shape_csr_ptr[i],
-                        feed_shape_data + feed_shape_csr_ptr[i + 1]);
-    tmp.shape = const_cast<int64_t*>(shape.data());
-    tmp.ndim = shape.ndim();
+    tmp_ishape[i] = TShape(feed_shape_data + feed_shape_csr_ptr[i],
+                           feed_shape_data + feed_shape_csr_ptr[i + 1]);
+    tmp.shape = const_cast<int64_t*>(tmp_ishape[i].data());
+    tmp.ndim = tmp_ishape[i].ndim();
     tmp.ctx.device_type = kCPU;
     tmp.ctx.device_id = 0;
     tmp.dtype.bits = 32;
@@ -88,7 +89,6 @@ int NNSessionRun(SessionHandle handle, SymbolHandle graph, nn_uint num_feed,
     tmp.byte_offset = 0;
     feed[key] = tmp;
   }
-
   const std::vector<DLTensor*>& out =
       static_cast<Session*>(handle)->Run(static_cast<nnvm::Symbol*>(graph), feed);
   *num_out = static_cast<nn_uint>(out.size());

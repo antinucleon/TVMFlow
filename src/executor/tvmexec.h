@@ -28,12 +28,39 @@ struct VarState {
   DLDataType dtype;
   inline bool initialized() const { return blob != nullptr; }
   inline void ResetSpace(TShape s, DLContext ctx, DLDataType d) {
+    if (blob == nullptr || s != Shape() || !_SameContext(ctx) || !_SameType(d)) {
+      if (initialized()) {
+        TVM_CCALL(TVMArrayFree(blob));
+        blob = nullptr;
+      }
+      if (blob == nullptr) {
+        TVM_CCALL(TVMArrayAlloc(
+            s.data(), s.ndim(), d.code, d.bits, d.lanes, ctx.device_type, ctx.device_id, &blob));
+      }
+    }
+    /*
     if (initialized()) {
       TVM_CCALL(TVMArrayFree(blob));
     }
     TVM_CCALL(TVMArrayAlloc(
         s.data(), s.ndim(), d.code, d.bits, d.lanes, ctx.device_type, ctx.device_id, &blob));
+  */
   }
+  inline bool _SameType(DLDataType d) const {
+    if (initialized()) {
+      auto dtype = Dtype();
+      return (dtype.code == d.code && dtype.bits == d.bits && dtype.lanes == d.lanes);
+    }
+    return false;
+  }
+  inline bool _SameContext(DLContext ctx) const {
+    if (initialized()) {
+      auto context = Context();
+      return (context.device_type == ctx.device_type && context.device_id == ctx.device_id);
+    }
+    return false;
+  }
+
   inline TShape Shape() const {
     CHECK_EQ(initialized(), true);
     return DLShapeToTShape(blob->shape, blob->ndim);

@@ -74,7 +74,6 @@ nnvm::Graph GraphPartition(nnvm::Graph g) {
     }
 
     TOpPattern pt = op_pattern.get(inode.source->op(), kExtern);
-
     if (pt <= kBroadcast) {
       int chosen_master = -1;
       bool ewise = inode.source->num_outputs() == 1;

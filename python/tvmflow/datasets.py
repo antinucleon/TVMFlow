@@ -10,6 +10,7 @@ from subprocess import call
 
 class ArrayPacker(object):
     """Dataset packer for iterator"""
+
     def __init__(self, X, Y):
         self.images = X
         self.labels = Y
@@ -18,16 +19,18 @@ class ArrayPacker(object):
     def next_batch(self, batch_size):
         if self.ptr + batch_size >= self.labels.shape[0]:
             self.ptr = 0
-        X = self.images[self.ptr:self.ptr+batch_size]
-        Y = self.labels[self.ptr:self.ptr+batch_size]
+        X = self.images[self.ptr:self.ptr + batch_size]
+        Y = self.labels[self.ptr:self.ptr + batch_size]
         self.ptr += batch_size
         return X, Y
 
+
 MNISTData = namedtuple("MNISTData", ["train", "test"])
+
 
 def get_mnist(flatten=False, onehot=False):
     mnist = fetch_mldata('MNIST original')
-    np.random.seed(1234) # set seed for deterministic ordering
+    np.random.seed(1234)  # set seed for deterministic ordering
     p = np.random.permutation(mnist.data.shape[0])
     X = mnist.data[p]
     Y = mnist.target[p]
@@ -49,6 +52,7 @@ def get_mnist(flatten=False, onehot=False):
 
 
 CIFAR10Data = namedtuple("CIFAR10Data", ["train", "test"])
+
 
 def load_batch(fpath, label_key='labels'):
     f = open(fpath, 'rb')
@@ -100,7 +104,7 @@ def get_cifar10(swap_axes=False):
 
     if swap_axes:
         X_train = np.swapaxes(X_train, 1, 3)
-        X_test  = np.swapaxes(X_test,  1, 3)
+        X_test = np.swapaxes(X_test,  1, 3)
 
     return CIFAR10Data(train=ArrayPacker(X_train, y_train),
-            test=ArrayPacker(X_test, y_test))
+                       test=ArrayPacker(X_test, y_test))

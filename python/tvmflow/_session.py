@@ -7,6 +7,7 @@ from ._nnvm._base import c_str, check_call, _LIB, c_array, nn_uint
 SessionHandle = _ctypes.c_void_p
 nn_float = _ctypes.c_float
 
+
 def _get_numpy(cptr, dtype, shape):
     if dtype != 0:
         raise ValueError("only float32 is supported so far")
@@ -18,6 +19,7 @@ def _get_numpy(cptr, dtype, shape):
         return np.frombuffer(dbuffer, dtype=np.float32).reshape(shape).copy()
     else:
         return None
+
 
 class Session(object):
     def __init__(self, config='cpu, float32'):

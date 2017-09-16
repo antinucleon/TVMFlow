@@ -15,7 +15,7 @@ using tvm::Tensor;
 using tvm::runtime::PackedFunc;
 
 NNVM_REGISTER_OP_GROUP(ElementwiseOpAttr)
-    .set_attr<TOpPattern>("TOpPattern", kExtern)
+    .set_attr<TOpPattern>("TOpPattern", kBroadcast)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleEWise)
     .set_attr<nnvm::FInferShape>("FInferShape", SameShape);
 
@@ -407,7 +407,7 @@ NNVM_REGISTER_OP(_reduce_mean_backward)
 NNVM_REGISTER_OP(softmax)
     .describe("softmax")
     .set_num_inputs(1)
-    .set_attr<TOpPattern>("TOpPattern", kExtern)
+    .set_attr<TOpPattern>("TOpPattern", kComplex)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
     .set_attr<nnvm::FInferShape>("FInferShape", SameShape)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeSoftmax)
@@ -419,7 +419,7 @@ NNVM_REGISTER_OP(softmax)
 NNVM_REGISTER_OP(softmax_bwd)
     .set_num_inputs(2)
     .set_num_outputs(1)
-    .set_attr<TOpPattern>("TOpPattern", kExtern)
+    .set_attr<TOpPattern>("TOpPattern", kComplex)
     .set_attr<nnvm::FInferShape>("FInferShape", SameShape)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeSoftmaxBwd)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
@@ -443,4 +443,71 @@ NNVM_REGISTER_OP(relu_bwd)
     .set_attr<nnvm::FInferShape>("FInferShape", SameShape)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeReLUBwd)
     .set_attr<nnvm::TIsBackward>("TIsBackward", true);
+
+NNVM_REGISTER_OP(flatten)
+    .set_num_inputs(1)
+    .set_num_outputs(1)
+    .include("ElementwiseOpAttr")
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeFlatten)
+    .set_attr<nnvm::FInferShape>("FInferShape",
+                                 [](const NodeAttrs& attrs, std::vector<TShape>* ishape,
+                                    std::vector<TShape>* oshape) {
+                                   CHECK_EQ(ishape->size(), 1);
+                                   if (ishape->at(0).ndim() == 0) return false;
+                                   TShape target{ishape->at(0)[0], ishape->at(0)[1]};
+                                   SHAPE_ASSIGN(oshape->at(0), target);
+                                   return true;
+                                 })
+    .set_attr<FGradient>("FGradient", [](const NodePtr& n, const std::vector<NodeEntry>& ograds) {
+      return std::vector<NodeEntry>{
+          MakeNode("flatten_bwd", n->attrs.name + "_grad_0", {ograds[0]})};
+    });
+
+NNVM_REGISTER_OP(flatten_bwd)
+    .set_num_inputs(1)
+    .set_num_outputs(1)
+    .include("ElementwiseOpAttr")
+    .set_attr<nnvm::FInferShape>("FInferShape",
+                                 [](const NodeAttrs& attrs, std::vector<TShape>* ishape,
+                                    std::vector<TShape>* oshape) {
+                                   CHECK_EQ(ishape->size(), 1);
+                                   if (ishape->at(0).ndim() == 0) return false;
+                                   TShape target{ishape->at(0)[0], ishape->at(0)[1], 1, 1};
+                                   SHAPE_ASSIGN(oshape->at(0), target);
+                                   return true;
+                                 })
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeFlattenBwd)
+    .set_attr<nnvm::TIsBackward>("TIsBackward", true);
+
+NNVM_REGISTER_OP(batch_norm)
+    .set_num_inputs(3)
+    .set_num_outputs(1)
+    .set_attr<TOpPattern>("TOpPattern", kComplex)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeBatchNorm)
+
+    .set_attr<nnvm::FInferShape>("FInferShape",
+                                 [](const NodeAttrs& attrs, std::vector<TShape>* ishape,
+                                    std::vector<TShape>* oshape) {
+                                   CHECK_EQ(ishape->size(), 3);
+                                   if (ishape->at(0).ndim() == 0) return false;
+                                   CHECK_EQ(ishape->at(0).ndim(), 4);
+                                   TShape pshape{1, ishape->at(0)[1], 1, 1};
+                                   SHAPE_ASSIGN(ishape->at(1), pshape);
+                                   SHAPE_ASSIGN(ishape->at(2), pshape);
+                                   SHAPE_ASSIGN(oshape->at(0), ishape->at(0));
+                                   return true;
+                                 })
+    .set_attr<FGradient>("FGradient", [](const NodePtr& n, const std::vector<NodeEntry>& ograds) {
+      return MakeBackwardGrads("_batch_norm_backward", n, {ograds[0], n->inputs[0], n->inputs[1]});
+    });
+
+NNVM_REGISTER_OP(_batch_norm_backward)
+    .set_num_inputs(3)
+    .set_num_outputs(3)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeBatchNormBwd)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
+    .set_attr<int>("TOpPattern", kComplex)
+    .set_attr<nnvm::TIsBackward>("TIsBackward", true);
+
 }  // namespace tvmflow

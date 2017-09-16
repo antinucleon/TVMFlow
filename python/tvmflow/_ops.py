@@ -88,8 +88,8 @@ def compute_matmul(data, weight):
     batch, in_dim = data.shape
     _, out_dim = weight.shape
     k = tvm.reduce_axis((0, in_dim), name='k')
-    return tvm.compute((batch, out_dim), lambda i, j:
-                       tvm.sum(data[i][k] * weight[k][j], axis=k))
+    return tvm.compute((batch, out_dim),
+                       lambda i, j: tvm.sum(data[i][k] * weight[k][j], axis=k))
 
 
 @tvm.register_func("tvm_graph.schedule.extern")

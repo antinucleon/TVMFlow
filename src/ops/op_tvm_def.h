@@ -320,6 +320,39 @@ Array<Tensor> ComputeReLUBwd(const NodeAttrs& attrs, const Array<Tensor>& inputs
   Tensor ret = pf(inputs[0], inputs[1]);
   return {ret};
 }
+
+Array<Tensor> ComputeFlatten(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.flatten");
+  CHECK_EQ(inputs.size(), 1U);
+  Tensor ret = pf(inputs[0]);
+  return {ret};
+}
+
+Array<Tensor> ComputeFlattenBwd(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.flatten_bwd");
+  CHECK_EQ(inputs.size(), 1U);
+  Tensor ret = pf(inputs[0]);
+  return {ret};
+}
+
+Array<Tensor> ComputeBatchNorm(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.bn_train");
+  CHECK_EQ(inputs.size(), 3U);
+  CHECK(attrs.dict.find("eps") != attrs.dict.end());
+  const std::string& eps = attrs.dict.at("eps");
+  Tensor ret = pf(inputs[0], inputs[1], inputs[2], atof(eps.c_str()));
+  return {ret};
+}
+
+Array<Tensor> ComputeBatchNormBwd(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.bn_bwd");
+  CHECK_EQ(inputs.size(), 3U);
+  CHECK(attrs.dict.find("eps") != attrs.dict.end());
+  const std::string& eps = attrs.dict.at("eps");
+  Tensor gx, gg, gb = pf(inputs[0], inputs[1], inputs[2], atof(eps.c_str()));
+  return {gx, gg, gb};
+}
+
 /**************************************************
  *   Schedule
  **************************************************/

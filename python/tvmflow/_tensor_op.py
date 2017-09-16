@@ -14,6 +14,10 @@ import re
 from . import _topi
 
 
+def _tvm_pow(x, y):
+    return tvm.intrin.call_pure_intrin(x.dtype, "pow", x)
+
+
 @tvm.register_func("tvm_graph.compute.assign")
 def compute_assign(a, b):
     b.copyto(a)
@@ -23,8 +27,7 @@ def compute_assign(a, b):
 def tensor_assign(a, b):
     return tvm.extern(
         a.shape, [a, b],
-        lambda ins, outs: tvm.call_packed(
-            "tvm_graph.compute.assign", ins[0], ins[1]),
+        lambda ins, outs: tvm.call_packed("tvm_graph.compute.assign", ins[0], ins[1]),
         name="assign")
 
 
@@ -92,8 +95,7 @@ def tensor_normal(shape, loc, scale):
     scale = float(scale)
     return tvm.extern(
         shape, [],
-        lambda ins, outs: tvm.call_packed(
-            "tvm_graph.compute.normal", outs[0], loc, scale),
+        lambda ins, outs: tvm.call_packed("tvm_graph.compute.normal", outs[0], loc, scale),
         name="normal",
         dtype=[tvm.float32])
 
@@ -121,8 +123,7 @@ def tensor_argmax(x, axis):
             oshape.append(x.shape[i])
     return tvm.extern(
         [x.shape[0]], [x],
-        lambda ins, outs: tvm.call_packed(
-            "tvm_graph.compute.argmax", ins[0], outs[0], axis),
+        lambda ins, outs: tvm.call_packed("tvm_graph.compute.argmax", ins[0], outs[0], axis),
         name="argmax")
 
 
@@ -217,6 +218,7 @@ def compute_global_pool_bwd(outgrad, indata):
 def compute_flatten(x):
     # flatten output from global pool
     ishape = x.shape
+    assert len(ishape) == 4
     return tvm.compute((ishape[0], ishape[1]), lambda i, j: x[i, j, 0, 0])
 
 
@@ -224,78 +226,94 @@ def compute_flatten(x):
 def compute_flatten_bwd(x):
     # return from 2d to 4d
     ishape = x.shape
-    return tvm.compute((ishape[0], ishape[1], 1, 1), lambda i, j, k, l: x[i, j])
+    return tvm.compute((ishape[0], ishape[1], 1, 1),
+                       lambda i, j, k, l: x[i, j])
 
-
-# conv backward
 
 @tvm.register_func("tvm_graph.compute.bn_train")
-def compute_bn_train(moving_mean, moving_var, x, gamma, beta, eps):
+def compute_bn_train(x, gamma, beta, eps):
     batch, in_channel, in_height, in_width = x.shape
-    rb = tvm.reduce_axis((0, batch), name='rmb')
-    rh = tvm.reduce_axis((0, in_height), name='rmh')
-    rw = tvm.reduce_axis((0, in_width), name='rmw')
+    factor = batch * in_height * in_channel
+    rb = tvm.reduce_axis((0, batch))
+    rh = tvm.reduce_axis((0, in_height))
+    rw = tvm.reduce_axis((0, in_width))
     mean = tvm.compute((1, in_channel, 1, 1),
-        lambda _t, i, _tt, _ttt: tvm.sum(x[rb, i, rh, rw] / batch / in_height / in_channel, axis=[rb, rh, rw]))
-    rb = tvm.reduce_axis((0, batch), name='rvb')
-    rh = tvm.reduce_axis((0, in_height), name='rvh')
-    rw = tvm.reduce_axis((0, in_width), name='rvw')
+        lambda n, c, h, w: tvm.sum(x[rb, c, rh, rw] / factor, axis=[rb, rh, rw]))
+    rb = tvm.reduce_axis((0, batch))
+    rh = tvm.reduce_axis((0, in_height))
+    rw = tvm.reduce_axis((0, in_width))
     # change when we have pow
     var = tvm.compute((1, in_channel, 1, 1),
-        lambda _t, i, _tt, _ttt: tvm.sum(((tvm.pow(x[rb, i, rh, rw] - mean[0, i, 0, 0]), 2) / batch / in_height / in_channel, axis=[rb, rh, rw]))
-    out=tmp.compute(x.shape,
-        lambda n, c, h, w: gamma[0][c][0][0] * (x[n][c][h][w] - mean[0, c, 0, 0]) / tvm.sqrt(var[0, c, 0, 0] + eps) + beta[0, c, 0, 0])
+        lambda n, c, h, w: tvm.sum(_tvm_pow(x[rb, c, rh, rw] - mean[0, c, 0, 0], 2)
+        / factor, axis=[rb, rh, rw]))
+    out = tvm.compute(x.shape,
+        lambda n, c, h, w:
+            gamma[0, c, 0, 0] * (x[n, c, h, w] - mean[0, c, 0, 0]) /
+                tvm.sqrt(var[0, c, 0, 0] + eps) + beta[0, c, 0, 0])
     return out
+
 
 @tvm.register_func("tvm_graph.compute.bn_bwd")
 def compute_bn_bwd(outgrad, x, gamma, eps):
-    batch, in_channel, in_height, in_width=x.shape
-    rb=tvm.reduce_axis((0, batch), name='rmb')
-    rh=tvm.reduce_axis((0, in_height), name='rmh')
-    rw=tvm.reduce_axis((0, in_width), name='rmw')
+    batch, in_channel, in_height, in_width = x.shape
+    factor = batch * in_height * in_width
+    rb = tvm.reduce_axis((0, batch))
+    rh = tvm.reduce_axis((0, in_height))
+    rw = tvm.reduce_axis((0, in_width))
     mean=tvm.compute((1, in_channel, 1, 1),
-        lambda _t, i, _tt, _ttt: tvm.sum(x[rb, i, rh, rw] / batch / in_height / in_channel, axis=[rb, rh, rw]))
-    rb=tvm.reduce_axis((0, batch), name='rvb')
-    rh=tvm.reduce_axis((0, in_height), name='rvh')
-    rw=tvm.reduce_axis((0, in_width), name='rvw')
+        lambda n, c, h, w: tvm.sum(x[rb, i, rh, rw] / factor, axis=[rb, rh, rw]))
+    rb = tvm.reduce_axis((0, batch))
+    rh = tvm.reduce_axis((0, in_height))
+    rw = tvm.reduce_axis((0, in_width))
     # change when we have pow
-    var=tvm.compute((1, in_channel, 1, 1),
-        lambda _t, i, _tt, _ttt: tvm.sum(((tvm.pow(x[rb, i, rh, rw] - mean[0, i, 0, 0]), 2) / batch / in_height / in_channel, axis=[rb, rh, rw]))
-    # grad
-    g_tmp=tvm.compute(outgrad.shape, lambda n, c, h,
-                      w: outgrad[n][c][h][w] * gamma[0][c][0][0])
-    rb=tvm.reduce_axis((0, batch), name='rvb')
-    rh=tvm.reduce_axis((0, in_height), name='rvh')
-    rw=tvm.reduce_axis((0, in_width), name='rvw')
+    var = tvm.compute((1, in_channel, 1, 1),
+        lambda n, c, h, w: tvm.sum(_tvm_pow(x[rb, c, rh, rw] - mean[0, c, 0, 0], 2)
+        / factor, axis=[rb, rh, rw]))    # grad
+    g_tmp = tvm.compute(
+        outgrad.shape,
+        lambda n, c, h, w: outgrad[n, c, h, w] * gamma[0, c, 0, 0])
+    rb = tvm.reduce_axis((0, batch))
+    rh = tvm.reduce_axis((0, in_height))
+    rw = tvm.reduce_axis((0, in_width))
     g_var=tvm.compute(gamma.shape,
-        lambda n, c, h, w: tvm.sum(g_tmp[n][c][h][w] * (x[n][c][h][w] - mean[0][c][0][0]) * (-0.5) * tvm.pow(var[0][c][0][0] + eps, -1.5), axis=[rb, rh, rw]))
-    rb=tvm.reduce_axis((0, batch), name='rvb')
-    rh=tvm.reduce_axis((0, in_height), name='rvh')
-    rw=tvm.reduce_axis((0, in_width), name='rvw')
+        lambda n, c, h, w: tvm.sum(g_tmp[n, c, h, w] *
+                                   (x[n, c, h, w] - mean[0, c, 0, 0]) * (-0.5) *
+                                   _tvm_pow(var[0, c, 0, 0] + eps, -1.5), axis=[rb, rh, rw]))
+    rb = tvm.reduce_axis((0, batch))
+    rh = tvm.reduce_axis((0, in_height))
+    rw = tvm.reduce_axis((0, in_width))
     g_mean_1=tvm.compute(gamma.shape,
-        lambda n, c, h, w: tvm.sum(g_tmp[n][c][h][w] * (-1) / tvm.sqrt(var[0][c][0][0] + eps), axis=[rb, rh, rw]))
-    rb=tvm.reduce_axis((0, batch), name='rvb')
-    rh=tvm.reduce_axis((0, in_height), name='rvh')
-    rw=tvm.reduce_axis((0, in_width), name='rvw')
+        lambda n, c, h, w: tvm.sum(-1 * g_tmp[n, c, h, w] /
+                                   tvm.sqrt(var[0, c, 0, 0] + eps), axis=[rb, rh, rw]))
+    rb = tvm.reduce_axis((0, batch))
+    rh = tvm.reduce_axis((0, in_height))
+    rw = tvm.reduce_axis((0, in_width))
     g_mean_2=tvm.compute(gamma.shape,
-        lambda n, c, h, w: tvm.sum(-2 * (x[n][c][h][w] - mean[0][c]
-                                   [0][0]) / batch / in_height / in_width, axis=[rb, rh, rw])
-    g_mean=tvm.compute(gamma.shape,
-        lambda n, c, h, w: g_mean_1[0][c][0][0] + g_var[0][c][0][0] * g_mean_2[0][c][0][0])
+        lambda n, c, h, w: tvm.sum(-2 * (x[n, c, h, w] - mean[0, c, 0, 0]) / factor,
+         axis=[rb, rh, rw]))
+    g_mean = tvm.compute(
+        gamma.shape,
+        lambda n, c, h, w: g_mean_1[0, c, 0, 0] + g_var[0, c, 0, 0] * g_mean_2[0, c, 0, 0]
+    )
     g_x=tvm.compute(x.shape,
-        lambda n, c, h, w: g_tmp[n][c][h][w] * (-1) / tvm.sqrt(var[0][c][0][0] + eps) + g_var[0][c][0][0] * 2 * (x[n][c][h][w] - mean[0][c][0][0]) / batch / in_height / in_width + g_mean[0][c][0][0] / batch / in_height / in_width)
-    rb=tvm.reduce_axis((0, batch), name='rvb')
-    rh=tvm.reduce_axis((0, in_height), name='rvh')
-    rw=tvm.reduce_axis((0, in_width), name='rvw')
+        lambda n, c, h, w: -1 * g_tmp[n, c, h, w] /
+            tvm.sqrt(var[0, c, 0, 0] + eps) +
+            g_var[0, c, 0, 0] * 2 * (x[n, c, h, w] - mean[0, c, 0, 0]) /
+             factor + g_mean[0, c, 0, 0] / factor)
+    rb = tvm.reduce_axis((0, batch))
+    rh = tvm.reduce_axis((0, in_height))
+    rw = tvm.reduce_axis((0, in_width))
     g_gamma=tvm.compute(gamma.shape, lambda n, c, h, w: tvm.sum(
-        outgrad[n][c][h][w] * g_tmp[n][c][h][w], axis=[rb, rh, rw]))
-    rb=tvm.reduce_axis((0, batch), name='rvb')
-    rh=tvm.reduce_axis((0, in_height), name='rvh')
-    rw=tvm.reduce_axis((0, in_width), name='rvw')
-    g_beta=tvm.compute(beta.shape, lambda n, c, h, w: tvm.sum(
-        outgrad[n][c][h][w] / batch / in_height / in_width))
+        outgrad[n, c, h, w] * g_tmp[n, c, h, w], axis=[rb, rh, rw]))
+    rb = tvm.reduce_axis((0, batch))
+    rh = tvm.reduce_axis((0, in_height))
+    rw = tvm.reduce_axis((0, in_width))
+    g_beta = tvm.compute(
+        beta.shape, lambda n, c, h, w: tvm.sum(outgrad[n, c, h, w] / factor))
     return g_x, g_gamma, g_beta
 
+
+"""
 @tvm.register_func("tvm_graph.compute.conv2d")
 def compute_conv2d_nchw(Input, Filter, stride, padding):
     return _topi.nn.conv2d_nchw(Input, Filter, stride, padding)
@@ -340,3 +358,4 @@ def compute_conv2d_nchw_bwd_data(outgrad, Input, weight_shape, stride, padding):
             padded_in[rb, c, fh + rh * stride_h, fw + rw * stride_w], axis=[rb, rh, rw])
         )
     return gw
+"""

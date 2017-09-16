@@ -170,14 +170,19 @@ void TVMExecutor::SetupOpExecs() {
     const auto& inode = idx[nid];
     if (inode.source->is_variable()) continue;
     if (inode.source->op()->name == "placeholder") continue;
+    int cnt = 0;
     std::vector<DLTensor> args;
+    // LOG(INFO) << inode.source->op()->name;
     for (const auto& e : inode.inputs) {
       args.push_back(data_entry_[idx.entry_id(e)]);
+      // LOG(INFO) << "i: " << DLShapeToTShape(args.back().shape, args.back().ndim);
     }
     for (uint32_t index = 0; index < inode.source->num_outputs(); ++index) {
       uint32_t eid = idx.entry_id(nid, index);
       args.push_back(data_entry_[eid]);
+      // LOG(INFO) << "o: " << DLShapeToTShape(args.back().shape, args.back().ndim);
     }
+
     CHECK_EQ(inode.source->op(), tvm_op) << "transform the graph to tvm op";
     op_execs_[nid] = CreateTVMOp(inode.source->attrs, args, inode.inputs.size());
   }

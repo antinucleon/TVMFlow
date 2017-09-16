@@ -362,6 +362,7 @@ NNVM_REGISTER_OP_GROUP(ReduceBackwardIndeAttr).set_attr<nnvm::TIsBackward>("TIsB
 NNVM_REGISTER_OP(_argmax)
     .set_attr_parser(ParamParser<ReduceParam>)
     .set_num_inputs(1)
+    .set_attr<int>("TOpPattern", kExtern)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeArgmax)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleExtern)
     .set_attr<FInferShape>("FInferShape", ReduceShape);
@@ -370,6 +371,7 @@ NNVM_REGISTER_OP(reduce_sum)
     .describe("reduce sum")
     .set_attr_parser(ParamParser<ReduceParam>)
     .set_num_inputs(1)
+    .set_attr<int>("TOpPattern", kComplex)
     .set_attr<FInferShape>("FInferShape", ReduceShape)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeRedSum)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
@@ -380,6 +382,7 @@ NNVM_REGISTER_OP(reduce_sum)
 NNVM_REGISTER_OP(_reduce_sum_backward)
     .set_num_inputs(2)
     .set_num_outputs(1)
+    .set_attr<int>("TOpPattern", kComplex)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeRedSumBwd)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
     .include("ReduceBackwardIndeAttr");
@@ -388,6 +391,7 @@ NNVM_REGISTER_OP(reduce_mean)
     .describe("reduce mean")
     .set_attr_parser(ParamParser<ReduceParam>)
     .set_num_inputs(1)
+    .set_attr<int>("TOpPattern", kComplex)
     .set_attr<FInferShape>("FInferShape", ReduceShape)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeRedMean)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
@@ -399,6 +403,7 @@ NNVM_REGISTER_OP(reduce_mean)
 NNVM_REGISTER_OP(_reduce_mean_backward)
     .set_num_inputs(2)
     .set_num_outputs(1)
+    .set_attr<int>("TOpPattern", kComplex)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeRedMeanBwd)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
     .set_attr<nnvm::TIsBackward>("TIsBackward", true)
@@ -408,7 +413,7 @@ NNVM_REGISTER_OP(softmax)
     .describe("softmax")
     .set_num_inputs(1)
     .set_attr<TOpPattern>("TOpPattern", kComplex)
-    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleSoftmax)
     .set_attr<nnvm::FInferShape>("FInferShape", SameShape)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeSoftmax)
     .set_attr<FGradient>("FGradient", [](const NodePtr& n, const std::vector<NodeEntry>& ograds) {
@@ -482,10 +487,9 @@ NNVM_REGISTER_OP(flatten_bwd)
 NNVM_REGISTER_OP(batch_norm)
     .set_num_inputs(3)
     .set_num_outputs(1)
-    .set_attr<TOpPattern>("TOpPattern", kComplex)
+    .set_attr<TOpPattern>("TOpPattern", kExtern)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeBatchNorm)
-
     .set_attr<nnvm::FInferShape>("FInferShape",
                                  [](const NodeAttrs& attrs, std::vector<TShape>* ishape,
                                     std::vector<TShape>* oshape) {
@@ -506,6 +510,149 @@ NNVM_REGISTER_OP(_batch_norm_backward)
     .set_num_inputs(3)
     .set_num_outputs(3)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeBatchNormBwd)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
+    .set_attr<int>("TOpPattern", kExtern)
+    .set_attr<nnvm::TIsBackward>("TIsBackward", true);
+
+NNVM_REGISTER_OP(conv2d)
+    .set_num_inputs(2)
+    .set_num_outputs(1)
+    .set_attr<TOpPattern>("TOpPattern", kExtern)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleConv)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeConv)
+    .set_attr<nnvm::FInferShape>("FInferShape",
+                                 [](const NodeAttrs& attrs, std::vector<TShape>* ishape,
+                                    std::vector<TShape>* oshape) {
+                                   static const PackedFunc& pf =
+                                       GetPackedFunc("tvm_graph.shape_infer.conv2d");
+                                   CHECK_EQ(ishape->size(), 2);
+                                   CHECK_EQ(ishape->at(0).ndim(), 4);
+                                   CHECK_EQ(ishape->at(1).ndim(), 4);
+                                   std::stringstream ss_data;
+                                   std::stringstream ss_weight;
+                                   ss_data << ishape->at(0);
+                                   ss_weight << ishape->at(1);
+                                   std::string pad;
+                                   std::string stride;
+                                   if (attrs.dict.find("pad") != attrs.dict.end()) {
+                                     pad = attrs.dict.at("pad");
+                                   } else {
+                                     LOG(INFO) << "Use default SAME pad.";
+                                     pad = "SAME";
+                                   }
+                                   if (attrs.dict.find("stride") != attrs.dict.end()) {
+                                     stride = attrs.dict.at("stride");
+                                   } else {
+                                     LOG(INFO) << "Use default stride 1.";
+                                     stride = "1";
+                                   }
+
+                                   TShape ret;
+                                   std::string tmp =
+                                       pf(ss_data.str(), ss_weight.str(), stride, pad);
+                                   std::stringstream ss;
+                                   ss << tmp;
+                                   ss >> ret;
+                                   SHAPE_ASSIGN(oshape->at(0), ret);
+                                   return true;
+                                 })
+    .set_attr<FGradient>("FGradient", [](const NodePtr& n, const std::vector<NodeEntry>& ograds) {
+      return MakeBackwardGrads(
+          "_conv2d_backward",
+          n,
+          {ograds[0], n->inputs[0], n->inputs[1]},
+          {{"pad", n->attrs.dict.at("pad")}, {"stride", n->attrs.dict.at("stride")}});
+    });
+
+NNVM_REGISTER_OP(_conv2d_backward)
+    .set_num_inputs(2)
+    .set_num_outputs(2)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeConvBwd)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleConv)
+    .set_attr<int>("TOpPattern", kExtern)
+    .set_attr<nnvm::TIsBackward>("TIsBackward", true);
+
+NNVM_REGISTER_OP(add_bias2d)
+    .set_num_inputs(2)
+    .set_num_outputs(1)
+    .set_attr<TOpPattern>("TOpPattern", kBroadcast)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleBroadcast)
+    .set_attr<nnvm::FInferShape>("FInferShape",
+                                 [](const NodeAttrs& attrs, std::vector<TShape>* ishape,
+                                    std::vector<TShape>* oshape) {
+                                   CHECK_EQ(ishape->size(), 2);
+                                   if (ishape->at(0).ndim() == 0) return false;
+                                   CHECK_EQ(ishape->at(0).ndim(), 2);
+                                   TShape pshape{1, ishape->at(0)[1]};
+                                   SHAPE_ASSIGN(ishape->at(1), pshape);
+                                   SHAPE_ASSIGN(oshape->at(0), ishape->at(0));
+                                   return true;
+                                 })
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeBias)
+    .set_attr<FGradient>("FGradient", [](const NodePtr& n, const std::vector<NodeEntry>& ograds) {
+      return MakeBackwardGrads("_bias2d_bwd", n, {ograds[0], n->inputs[1]});
+    });
+
+NNVM_REGISTER_OP(_bias2d_bwd)
+    .set_num_inputs(2)
+    .set_num_outputs(2)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeBiasBwd)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
+    .set_attr<int>("TOpPattern", kComplex)
+    .set_attr<nnvm::TIsBackward>("TIsBackward", true);
+
+NNVM_REGISTER_OP(global_pool)
+    .set_num_inputs(1)
+    .set_num_outputs(1)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeGlobalPool)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
+    .set_attr<nnvm::FInferShape>("FInferShape",
+                                 [](const NodeAttrs& attrs, std::vector<TShape>* ishape,
+                                    std::vector<TShape>* oshape) {
+                                   CHECK_EQ(ishape->size(), 1);
+                                   if (ishape->at(0).ndim() == 0) return false;
+                                   CHECK_EQ(ishape->at(0).ndim(), 4);
+                                   TShape pshape{ishape->at(0)[0], ishape->at(0)[1], 1, 1};
+                                   SHAPE_ASSIGN(oshape->at(0), pshape);
+                                   return true;
+                                 })
+    .set_attr<FGradient>("FGradient", [](const NodePtr& n, const std::vector<NodeEntry>& ograds) {
+      return MakeBackwardGrads("_global_pool_bwd", n, {ograds[0], n->inputs[0]});
+    });
+
+NNVM_REGISTER_OP(_global_pool_bwd)
+    .set_num_inputs(2)
+    .set_num_outputs(1)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeGlobalPoolBwd)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleBroadcast)
+    .set_attr<int>("TOpPattern", kComplex)
+    .set_attr<nnvm::TIsBackward>("TIsBackward", true);
+
+NNVM_REGISTER_OP(add_bias4d)
+    .set_num_inputs(2)
+    .set_num_outputs(1)
+    .set_attr<TOpPattern>("TOpPattern", kBroadcast)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleBroadcast)
+    .set_attr<nnvm::FInferShape>("FInferShape",
+                                 [](const NodeAttrs& attrs, std::vector<TShape>* ishape,
+                                    std::vector<TShape>* oshape) {
+                                   CHECK_EQ(ishape->size(), 2);
+                                   if (ishape->at(0).ndim() == 0) return false;
+                                   CHECK_EQ(ishape->at(0).ndim(), 4);
+                                   TShape pshape{1, ishape->at(0)[1], 1, 1};
+                                   SHAPE_ASSIGN(ishape->at(1), pshape);
+                                   SHAPE_ASSIGN(oshape->at(0), ishape->at(0));
+                                   return true;
+                                 })
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeBias)
+    .set_attr<FGradient>("FGradient", [](const NodePtr& n, const std::vector<NodeEntry>& ograds) {
+      return MakeBackwardGrads("_bias4d_bwd", n, {ograds[0], n->inputs[1]});
+    });
+
+NNVM_REGISTER_OP(_bias4d_bwd)
+    .set_num_inputs(2)
+    .set_num_outputs(2)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeBiasBwd)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
     .set_attr<int>("TOpPattern", kComplex)
     .set_attr<nnvm::TIsBackward>("TIsBackward", true);

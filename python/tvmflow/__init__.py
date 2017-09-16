@@ -12,3 +12,7 @@ from ._base import *
 from ._ops import *
 
 from ._tensor_op import *
+
+from .train import *
+
+from . import nn

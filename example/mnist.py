@@ -20,7 +20,7 @@ cross_entropy = tf.reduce_mean(
 learning_rate = 5e-1
 
 W_grad = tf.gradients(cross_entropy, [W])[0]
-train_step = tf.assign(W, W - learning_rate * W_grad)
+train_step = tf.Group([tf.assign(W, W - learning_rate * W_grad)])
 
 sess = tf.Session()
 

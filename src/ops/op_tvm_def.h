@@ -212,7 +212,6 @@ Array<Tensor> ComputePow(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
 Array<Tensor> ComputeRPowScalar(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
   static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.ufunc_scalar");
   CHECK_EQ(inputs.size(), 1U);
-  LOG(FATAL) << "intrin_rule is not implemented";
   int op = kDiv;
   float scalar = atof(attrs.dict.at("scalar").c_str());
   Tensor ret = pf(inputs[0], scalar, op);
@@ -335,22 +334,128 @@ Array<Tensor> ComputeFlattenBwd(const NodeAttrs& attrs, const Array<Tensor>& inp
   return {ret};
 }
 
+Array<Tensor> ComputeBias(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  CHECK_EQ(inputs.size(), 2);
+  if (inputs[0].ndim() == 4) {
+    static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.bias4d");
+    Tensor ret = pf(inputs[0], inputs[1]);
+    return {ret};
+  } else if (inputs[0].ndim() == 2) {
+    static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.bias2d");
+    Tensor ret = pf(inputs[0], inputs[1]);
+    return {ret};
+  } else {
+    LOG(FATAL) << "Not support dim";
+    return {};
+  }
+}
+
+Array<Tensor> ComputeBiasBwd(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  CHECK_EQ(inputs.size(), 2);
+  if (inputs[0].ndim() == 4) {
+    static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.bias4d_bwd");
+    Tensor gb = pf(inputs[0], inputs[1]);
+    static const PackedFunc& pf2 = GetPackedFunc("tvm_graph.compute.indentity");
+    Tensor gd = pf2(inputs[0]);
+    return {gd, gb};
+  } else if (inputs[0].ndim() == 2) {
+    static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.bias2d_bwd");
+    Tensor gb = pf(inputs[0], inputs[1]);
+    static const PackedFunc& pf2 = GetPackedFunc("tvm_graph.compute.indentity");
+    Tensor gd = pf2(inputs[0]);
+    return {gd, gb};
+  } else {
+    LOG(FATAL) << "Not support dim";
+    return {};
+  }
+}
+
 Array<Tensor> ComputeBatchNorm(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
   static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.bn_train");
   CHECK_EQ(inputs.size(), 3U);
-  CHECK(attrs.dict.find("eps") != attrs.dict.end());
-  const std::string& eps = attrs.dict.at("eps");
+  std::string eps;
+  if (attrs.dict.find("eps") != attrs.dict.end()) {
+    eps = attrs.dict.at("eps");
+  } else {
+    eps = "1e-5";
+  }
   Tensor ret = pf(inputs[0], inputs[1], inputs[2], atof(eps.c_str()));
   return {ret};
 }
 
 Array<Tensor> ComputeBatchNormBwd(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
-  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.bn_bwd");
   CHECK_EQ(inputs.size(), 3U);
-  CHECK(attrs.dict.find("eps") != attrs.dict.end());
-  const std::string& eps = attrs.dict.at("eps");
-  Tensor gx, gg, gb = pf(inputs[0], inputs[1], inputs[2], atof(eps.c_str()));
+  std::string eps;
+  if (attrs.dict.find("eps") != attrs.dict.end()) {
+    eps = attrs.dict.at("eps");
+  } else {
+    eps = "1e-5";
+  }
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.bn_bwd_data");
+  Tensor gx = pf(inputs[0], inputs[1], inputs[2], atof(eps.c_str()));
+  static const PackedFunc& pf2 = GetPackedFunc("tvm_graph.compute.bn_bwd_gamma");
+  Tensor gg = pf2(inputs[0], inputs[1], inputs[2], atof(eps.c_str()));
+  static const PackedFunc& pf3 = GetPackedFunc("tvm_graph.compute.bias4d_bwd");
+  Tensor gb = pf3(inputs[0], inputs[2]);
   return {gx, gg, gb};
+}
+
+Array<Tensor> ComputeConv(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  CHECK_EQ(inputs.size(), 2U);
+  std::string pad;
+  std::string stride;
+  if (attrs.dict.find("pad") != attrs.dict.end()) {
+    pad = attrs.dict.at("pad");
+  } else {
+    LOG(INFO) << "Use default SAME pad.";
+    pad = "SAME";
+  }
+  if (attrs.dict.find("stride") != attrs.dict.end()) {
+    stride = attrs.dict.at("stride");
+  } else {
+    LOG(INFO) << "Use default stride 1.";
+    stride = "1";
+  }
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.conv2d");
+  Tensor ret = pf(inputs[0], inputs[1], atoi(stride.c_str()), pad);
+  return {ret};
+}
+
+Array<Tensor> ComputeConvBwd(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  CHECK_EQ(inputs.size(), 3U);  // ograd, input, weight
+  std::string pad;
+  std::string stride;
+  if (attrs.dict.find("pad") != attrs.dict.end()) {
+    pad = attrs.dict.at("pad");
+  } else {
+    LOG(INFO) << "Use default SAME pad.";
+    pad = "SAME";
+  }
+  if (attrs.dict.find("stride") != attrs.dict.end()) {
+    stride = attrs.dict.at("stride");
+  } else {
+    LOG(INFO) << "Use default stride 1.";
+    stride = "1";
+  }
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.conv2d_bwd_data");
+  Tensor gdata = pf(inputs[0], inputs[1], inputs[2], stride, pad);
+  static const PackedFunc& pf2 = GetPackedFunc("tvm_graph.compute.conv2d_bwd_weight");
+  Tensor gweight = pf2(inputs[0], inputs[1], inputs[2], stride, pad);
+  return {gdata, gweight};
+}
+
+Array<Tensor> ComputeGlobalPool(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.global_pool");
+  CHECK_EQ(inputs.size(), 1U);
+  Tensor ret = pf(inputs[0]);
+  return {ret};
+}
+
+Array<Tensor> ComputeGlobalPoolBwd(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.global_pool_bwd");
+  CHECK_EQ(inputs.size(), 2U);
+  Tensor ret = pf(inputs[0], inputs[1]);
+  return {ret};
 }
 
 /**************************************************
@@ -375,9 +480,21 @@ Schedule ScheduleMatmul(const NodeAttrs& attrs, const Array<Tensor>& outs,
   return pf(outs, target);
 }
 
+Schedule ScheduleConv(const NodeAttrs& attrs, const Array<Tensor>& outs,
+                      const std::string& target) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.conv");
+  return pf(outs, target);
+}
+
 Schedule ScheduleReduction(const NodeAttrs& attrs, const Array<Tensor>& outs,
                            const std::string& target) {
   static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.reduction");
+  return pf(outs, target);
+}
+
+Schedule ScheduleSoftmax(const NodeAttrs& attrs, const Array<Tensor>& outs,
+                         const std::string& target) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.softmax");
   return pf(outs, target);
 }
 

@@ -236,6 +236,32 @@ def schedule_reduction(outs, target):
     return s
 
 
+@tvm.register_func("tvm_graph.schedule.softmax_bwd")
+def schedule_softmax_bwd(outs, target):
+    s = tvm.create_schedule([x.op for x in outs])
+    if target == "metal":
+        softmax = outs[0]
+        outgrad = softmax.op.input_tensors[0]
+        outdata = softmax.op.input_tensors[1]
+        redsum = softmax.op.input_tensors[2]
+        s[redsum.op.input_tensors[0]].compute_inline()
+        num_thread = 128
+        block_x = tvm.thread_axis("blockIdx.x")
+        thread_x = tvm.thread_axis((0, num_thread), "threadIdx.x")
+        # schedule red sum
+        k = redsum.op.reduce_axis[0]
+        ko, ki = s[redsum].split(k, factor=num_thread)
+        EF = s.rfactor(redsum, ki)
+        s[redsum].bind(s[redsum].op.axis[0], block_x)
+        s[redsum].bind(s[redsum].op.reduce_axis[0], thread_x)
+        s[EF].compute_at(s[redsum], s[redsum].op.reduce_axis[0])
+        s[redsum].set_store_predicate(thread_x.var.equal(0))
+        tx, xi = s[softmax].split(softmax.op.axis[1], nparts=num_thread)
+        s[softmax].bind(softmax.op.axis[0], block_x)
+        s[softmax].bind(tx, thread_x)
+    return s
+
+
 @tvm.register_func("tvm_graph.schedule.softmax")
 def schedule_softmax(outs, target):
     if target == "metal":

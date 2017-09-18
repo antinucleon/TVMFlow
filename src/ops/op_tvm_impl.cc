@@ -427,7 +427,7 @@ NNVM_REGISTER_OP(softmax_bwd)
     .set_attr<TOpPattern>("TOpPattern", kComplex)
     .set_attr<nnvm::FInferShape>("FInferShape", SameShape)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeSoftmaxBwd)
-    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleSoftmaxBwd)
     .set_attr<nnvm::TIsBackward>("TIsBackward", true);
 
 NNVM_REGISTER_OP(relu)

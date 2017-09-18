@@ -189,12 +189,15 @@ def compute_softmax(x):
 
 @tvm.register_func("tvm_graph.compute.softmax_bwd")
 def compute_softmax_bwd(out_grad, out_data):
+    m, n = out_grad.shape
     tmp1 = tvm.compute(
         out_data.shape, lambda *i: out_grad(*i) * out_data(*i), tag="ewise")
-    tmp2 = _topi.reduction.sum(tmp1, axis=1, keepdims=True)
+    k = tvm.reduce_axis((0, n), name='k')
+    tmp2 = tvm.compute((m), lambda i: tvm.sum(tmp1[i, k], axis=[k]))
+    #tmp2 = _topi.reduction.sum(tmp1, axis=1, keepdims=True)
     return tvm.compute(
         out_data.shape,
-        lambda i, j: out_data[i][j] * (out_grad[i][j] - tmp2[i][0]),
+        lambda i, j: out_data[i][j] * (out_grad[i][j] - tmp2[i]),
         tag="ewise")
 
 

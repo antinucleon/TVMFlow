@@ -480,6 +480,12 @@ Schedule ScheduleMatmul(const NodeAttrs& attrs, const Array<Tensor>& outs,
   return pf(outs, target);
 }
 
+Schedule ScheduleSoftmaxBwd(const NodeAttrs& attrs, const Array<Tensor>& outs,
+                            const std::string& target) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.softmax_bwd");
+  return pf(outs, target);
+}
+
 Schedule ScheduleConv(const NodeAttrs& attrs, const Array<Tensor>& outs,
                       const std::string& target) {
   static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.conv");

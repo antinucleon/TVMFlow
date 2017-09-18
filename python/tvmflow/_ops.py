@@ -214,7 +214,7 @@ def schedule_matmul(outs, target):
             k = OP.reduce_axis[0]
             schedule(A, B, C, k)
 
-    if target == "metal":
+    if target != "llvm":
         traverse(outs[0].op)
     return s
 

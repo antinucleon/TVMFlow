@@ -215,7 +215,17 @@ def schedule_matmul(outs, target):
             schedule(A, B, C, k)
 
     if target != "llvm":
-        traverse(outs[0].op)
+        print outs
+        if len(outs) == 1:
+            traverse(outs[0].op)
+        else:
+            # bwd
+            lhs = outs[0].op
+            rhs = outs[1].op
+            s[lhs.input_tensors[1]].compute_inline()
+            s[rhs.input_tensors[0]].compute_inline()
+            traverse(lhs)
+            traverse(rhs)
     return s
 
 

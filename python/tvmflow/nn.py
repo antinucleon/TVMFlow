@@ -7,6 +7,7 @@ float32 = 0
 
 
 def relu(x, name):
+    # ok
     return sym.relu(x, name=name)
 
 
@@ -15,12 +16,12 @@ def conv2d(x, out_filter, in_filter, kernel, stride, pad, name):
         init=sym.normal(
             shape=[out_filter, in_filter, kernel, kernel], dtype=float32),
         name="%s_weight" % name)
-    #b = Variable(
-    #    init=sym.zeros(shape=[1, out_filter, 1, 1], dtype=float32),
-    #    name="%s_bias" % name)
+    b = Variable(
+        init=sym.zeros(shape=[1, out_filter, 1, 1], dtype=float32),
+        name="%s_bias" % name)
     out = sym.conv2d(x, w, pad=pad, stride=stride, name=name)
-    #return sym.add_bias4d(out, b, name="%s_add_bias" % name)
-    return out
+    return sym.add_bias4d(out, b, name="%s_add_bias" % name)
+    #return out
 
 
 def fully_connected(x, out_dim, in_dim, name):
@@ -28,11 +29,12 @@ def fully_connected(x, out_dim, in_dim, name):
         init=sym.normal(
             shape=[in_dim, out_dim], dtype=float32, scale=1.0 / out_dim),
         name="%s_weight" % name)
-    b = Variable(
-        init=sym.zeros(shape=[1, out_dim], dtype=float32),
-        name="%s_bias" % name)
+    #b = Variable(
+    #    init=sym.zeros(shape=[1, out_dim], dtype=float32),
+    #    name="%s_bias" % name)
     out = sym.matmul(x, w, name=name)
-    return sym.add_bias2d(out, b, name="%s_add_bias" % name)
+    return out
+    #return sym.add_bias2d(out, b, name="%s_add_bias" % name)
 
 
 def batch_norm(x, in_dim, name):

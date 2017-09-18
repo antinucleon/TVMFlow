@@ -15,7 +15,7 @@ using tvm::Tensor;
 using tvm::runtime::PackedFunc;
 
 NNVM_REGISTER_OP_GROUP(ElementwiseOpAttr)
-    .set_attr<TOpPattern>("TOpPattern", kBroadcast)
+    .set_attr<TOpPattern>("TOpPattern", kExtern)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleEWise)
     .set_attr<nnvm::FInferShape>("FInferShape", SameShape);
 

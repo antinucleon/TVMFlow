@@ -20,16 +20,17 @@ def argmax(x, axis):
 @tvm.register_func("tvm_graph.compute.ufunc")
 def compute_ufunc(a, b, ufunc):
     if ufunc == 0:
-        return tvm.compute(a.shape, lambda *i: a(*i) + b(*i))
+        return tvm.compute(a.shape, lambda *i: a(*i) + b(*i), tag="ewise")
     elif ufunc == 1:
-        return tvm.compute(a.shape, lambda *i: a(*i) - b(*i))
+        return tvm.compute(a.shape, lambda *i: a(*i) - b(*i), tag="ewise")
     elif ufunc == 2:
         if len(a.shape) == 1 and len(b.shape) == 2:
-            return tvm.compute(b.shape, lambda i, j: a[0] * b[i, j])
+            return tvm.compute(
+                b.shape, lambda i, j: a[0] * b[i, j], tag="ewise")
         else:
-            return tvm.compute(a.shape, lambda *i: a(*i) * b(*i))
+            return tvm.compute(a.shape, lambda *i: a(*i) * b(*i), tag="ewise")
     elif ufunc == 3:
-        return tvm.compute(a.shape, lambda *i: a(*i) / b(*i))
+        return tvm.compute(a.shape, lambda *i: a(*i) / b(*i), tag="ewise")
     else:
         raise Exception("Unknown ufunc")
 
@@ -37,51 +38,52 @@ def compute_ufunc(a, b, ufunc):
 @tvm.register_func("tvm_graph.compute.ufunc_scalar")
 def compute_ufunc(a, b, ufunc):
     if ufunc == 0:
-        return tvm.compute(a.shape, lambda *i: a(*i) + b)
+        return tvm.compute(a.shape, lambda *i: a(*i) + b, tag="ewise")
     elif ufunc == 1:
-        return tvm.compute(a.shape, lambda *i: a(*i) - b)
+        return tvm.compute(a.shape, lambda *i: a(*i) - b, tag="ewise")
     elif ufunc == 2:
-        return tvm.compute(a.shape, lambda *i: a(*i) * b)
+        return tvm.compute(a.shape, lambda *i: a(*i) * b, tag="ewise")
     elif ufunc == 3:
-        return tvm.compute(a.shape, lambda *i: a(*i) / b)
+        return tvm.compute(a.shape, lambda *i: a(*i) / b, tag="ewise")
     else:
         raise Exception("Unknown ufunc")
 
 
 @tvm.register_func("tvm_graph.compute.rsub")
 def compute_ufunc(a, b):
-    return tvm.compute(a.shape, lambda *i: b - a(*i))
+    return tvm.compute(a.shape, lambda *i: b - a(*i), tag="ewise")
 
 
 @tvm.register_func("tvm_graph.compute.exp")
 def compute_exp(a):
-    return tvm.compute(a.shape, lambda *i: tvm.exp(a(*i)))
+    return tvm.compute(a.shape, lambda *i: tvm.exp(a(*i)), tag="ewise")
 
 
 @tvm.register_func("tvm_graph.compute.log")
 def compute_exp(a):
-    return tvm.compute(a.shape, lambda *i: tvm.log(a(*i)))
+    return tvm.compute(a.shape, lambda *i: tvm.log(a(*i)), tag="ewise")
 
 
 @tvm.register_func("tvm_graph.compute.sqrt")
 def compute_exp(a):
-    return tvm.compute(a.shape, lambda *i: tvm.sqrt(a(*i)))
+    return tvm.compute(a.shape, lambda *i: tvm.sqrt(a(*i)), tag="ewise")
 
 
 @tvm.register_func("tvm_graph.compute.pow")
 def compute_exp(a, b):
-    return tvm.compute(a.shape, lambda *i: tvm.pow(a(*i), b(*i)))
+    return tvm.compute(a.shape, lambda *i: tvm.pow(a(*i), b(*i)), tag="ewise")
 
 
 @tvm.register_func("tvm_graph.compute.rpow_scalar")
 def compute_exp(a, b):
-    return tvm.compute(a.shape, lambda *i: tvm.pow(b, a(*i)))
+    return tvm.compute(a.shape, lambda *i: tvm.pow(b, a(*i)), tag="ewise")
 
 
 @tvm.register_func("tvm_graph.compute.mat_trans")
 def compute_mat_trans(x):
     assert len(x.shape) == 2
-    return tvm.compute([x.shape[1], x.shape[0]], lambda i, j: x[j][i])
+    return tvm.compute(
+        [x.shape[1], x.shape[0]], lambda i, j: x[j][i], tag="ewise")
 
 
 @tvm.register_func("tvm_graph.compute.matmul")
@@ -91,8 +93,10 @@ def compute_matmul(data, weight):
     batch, in_dim = data.shape
     _, out_dim = weight.shape
     k = tvm.reduce_axis((0, in_dim), name='k')
-    return tvm.compute((batch, out_dim),
-                       lambda i, j: tvm.sum(data[i][k] * weight[k][j], axis=k))
+    return tvm.compute(
+        (batch, out_dim),
+        lambda i, j: tvm.sum(data[i][k] * weight[k][j], axis=k),
+        tag="matmul")
 
 
 ""
@@ -135,63 +139,83 @@ def schedule_ewise(outs, target):
 @tvm.register_func("tvm_graph.schedule.matmul")
 def schedule_matmul(outs, target):
     s = tvm.create_schedule([x.op for x in outs])
+
+    def schedule(A, B, C, k):
+        AA = s.cache_read(A, "shared", [C])
+        BB = s.cache_read(B, "shared", [C])
+        AL = s.cache_read(AA, "local", [C])
+        BL = s.cache_read(BB, "local", [C])
+        CC = s.cache_write(C, "local")
+
+        scale = 4
+        num_thread = 32
+        block_factor = scale * num_thread
+        block_x = tvm.thread_axis("blockIdx.x")
+        thread_x = tvm.thread_axis((0, num_thread), "threadIdx.x")
+        block_y = tvm.thread_axis("blockIdx.y")
+        thread_y = tvm.thread_axis((0, num_thread), "threadIdx.y")
+        thread_xz = tvm.thread_axis((0, 2), "vthread", name="vx")
+        thread_yz = tvm.thread_axis((0, 2), "vthread", name="vy")
+
+        by, yi = s[C].split(C.op.axis[0], factor=block_factor)
+        bx, xi = s[C].split(C.op.axis[1], factor=block_factor)
+        s[C].bind(by, block_y)
+        s[C].bind(bx, block_x)
+        s[C].reorder(by, bx, yi, xi)
+
+        tyz, yi = s[C].split(yi, nparts=2)
+        ty, yi = s[C].split(yi, nparts=num_thread)
+        txz, xi = s[C].split(xi, nparts=2)
+        tx, xi = s[C].split(xi, nparts=num_thread)
+        s[C].bind(tyz, thread_yz)
+        s[C].bind(txz, thread_xz)
+        s[C].bind(ty, thread_y)
+        s[C].bind(tx, thread_x)
+        s[C].reorder(tyz, txz, ty, tx, yi, xi)
+        s[CC].compute_at(s[C], tx)
+
+        yo, xo = CC.op.axis
+        ko, ki = s[CC].split(k, factor=8)
+        kt, ki = s[CC].split(ki, factor=1)
+        s[CC].reorder(ko, kt, ki, yo, xo)
+        s[AA].compute_at(s[CC], ko)
+        s[BB].compute_at(s[CC], ko)
+        s[AL].compute_at(s[CC], kt)
+        s[BL].compute_at(s[CC], kt)
+        # Schedule for A's shared memory load
+        ty, xi = s[AA].split(s[AA].op.axis[0], nparts=num_thread)
+        _, xi = s[AA].split(s[AA].op.axis[1], factor=num_thread * 4)
+        tx, xi = s[AA].split(xi, nparts=num_thread)
+        s[AA].bind(ty, thread_y)
+        s[AA].bind(tx, thread_x)
+        s[AA].vectorize(xi)
+        # Schedule for B' shared memory load
+        ty, xi = s[BB].split(s[BB].op.axis[0], nparts=num_thread)
+        _, xi = s[BB].split(s[BB].op.axis[1], factor=num_thread * 4)
+        tx, xi = s[BB].split(xi, nparts=num_thread)
+        s[BB].bind(ty, thread_y)
+        s[BB].bind(tx, thread_x)
+        s[BB].vectorize(xi)
+
+    def traverse(OP):
+        """Traverse operators from computation graph"""
+        # inline all one-to-one-mapping operators except the last stage (output)
+        if 'ewise' in OP.tag or 'bcast' in OP.tag:
+            if OP not in s.outputs:
+                s[OP].compute_inline()
+            for tensor in OP.input_tensors:
+                if tensor.op.input_tensors:
+                    traverse(tensor.op)
+        # schedule conv2d
+        elif 'matmul' in OP.tag:
+            A = OP.input_tensors[0]
+            B = OP.input_tensors[1]
+            C = OP.output(0)
+            k = OP.reduce_axis[0]
+            schedule(A, B, C, k)
+
     if target == "metal":
-        for C in outs:
-            AA = s.cache_read(A, "shared", [C])
-            BB = s.cache_read(B, "shared", [C])
-            AL = s.cache_read(AA, "local", [C])
-            BL = s.cache_read(BB, "local", [C])
-            CC = s.cache_write(C, "local")
-
-            scale = 4
-            num_thread = 32
-            block_factor = scale * num_thread
-            block_x = tvm.thread_axis("blockIdx.x")
-            thread_x = tvm.thread_axis((0, num_thread), "threadIdx.x")
-            block_y = tvm.thread_axis("blockIdx.y")
-            thread_y = tvm.thread_axis((0, num_thread), "threadIdx.y")
-            thread_xz = tvm.thread_axis((0, 2), "vthread", name="vx")
-            thread_yz = tvm.thread_axis((0, 2), "vthread", name="vy")
-
-            by, yi = s[C].split(C.op.axis[0], factor=block_factor)
-            bx, xi = s[C].split(C.op.axis[1], factor=block_factor)
-            s[C].bind(by, block_y)
-            s[C].bind(bx, block_x)
-            s[C].reorder(by, bx, yi, xi)
-
-            tyz, yi = s[C].split(yi, nparts=2)
-            ty, yi = s[C].split(yi, nparts=num_thread)
-            txz, xi = s[C].split(xi, nparts=2)
-            tx, xi = s[C].split(xi, nparts=num_thread)
-            s[C].bind(tyz, thread_yz)
-            s[C].bind(txz, thread_xz)
-            s[C].bind(ty, thread_y)
-            s[C].bind(tx, thread_x)
-            s[C].reorder(tyz, txz, ty, tx, yi, xi)
-            s[CC].compute_at(s[C], tx)
-
-            yo, xo = CC.op.axis
-            ko, ki = s[CC].split(k, factor=8)
-            kt, ki = s[CC].split(ki, factor=1)
-            s[CC].reorder(ko, kt, ki, yo, xo)
-            s[AA].compute_at(s[CC], ko)
-            s[BB].compute_at(s[CC], ko)
-            s[AL].compute_at(s[CC], kt)
-            s[BL].compute_at(s[CC], kt)
-            # Schedule for A's shared memory load
-            ty, xi = s[AA].split(s[AA].op.axis[0], nparts=num_thread)
-            _, xi = s[AA].split(s[AA].op.axis[1], factor=num_thread * 4)
-            tx, xi = s[AA].split(xi, nparts=num_thread)
-            s[AA].bind(ty, thread_y)
-            s[AA].bind(tx, thread_x)
-            s[AA].vectorize(xi)
-            # Schedule for B' shared memory load
-            ty, xi = s[BB].split(s[BB].op.axis[0], nparts=num_thread)
-            _, xi = s[BB].split(s[BB].op.axis[1], factor=num_thread * 4)
-            tx, xi = s[BB].split(xi, nparts=num_thread)
-            s[BB].bind(ty, thread_y)
-            s[BB].bind(tx, thread_x)
-            s[BB].vectorize(xi)
+        traverse(outs[0].op)
     return s
 
 

@@ -215,7 +215,6 @@ def schedule_matmul(outs, target):
             schedule(A, B, C, k)
 
     if target != "llvm":
-        print outs
         if len(outs) == 1:
             traverse(outs[0].op)
         else:

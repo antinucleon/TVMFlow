@@ -15,7 +15,7 @@ using tvm::Tensor;
 using tvm::runtime::PackedFunc;
 
 NNVM_REGISTER_OP_GROUP(ElementwiseOpAttr)
-    .set_attr<TOpPattern>("TOpPattern", kExtern)
+    .set_attr<TOpPattern>("TOpPattern", kBroadcast)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleEWise)
     .set_attr<nnvm::FInferShape>("FInferShape", SameShape);
 
@@ -605,7 +605,7 @@ NNVM_REGISTER_OP(global_pool)
     .set_num_inputs(1)
     .set_num_outputs(1)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeGlobalPool)
-    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleGlobalPool)
     .set_attr<nnvm::FInferShape>("FInferShape",
                                  [](const NodeAttrs& attrs, std::vector<TShape>* ishape,
                                     std::vector<TShape>* oshape) {
@@ -624,7 +624,7 @@ NNVM_REGISTER_OP(_global_pool_bwd)
     .set_num_inputs(2)
     .set_num_outputs(1)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeGlobalPoolBwd)
-    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleBroadcast)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleGlobalPoolBwd)
     .set_attr<int>("TOpPattern", kComplex)
     .set_attr<nnvm::TIsBackward>("TIsBackward", true);
 

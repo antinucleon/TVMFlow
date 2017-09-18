@@ -222,7 +222,7 @@ def compute_global_pool(x):
 @tvm.register_func("tvm_graph.compute.global_pool_bwd")
 def compute_global_pool_bwd(outgrad, indata):
     batch, channel, height, width = indata.shape
-    tmp = _topi.broadcast_to(outgrad, indata.shape, tag="bcast")
+    tmp = _topi.broadcast_to(outgrad, indata.shape)
     return tvm.compute(
         tmp.shape, lambda *i: tmp(*i) / height / width, tag="ewise")
 

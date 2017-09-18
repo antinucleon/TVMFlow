@@ -5,7 +5,7 @@ NNVM_ROOT = nnvm
 DMLC_CORE = dmlc-core
 
 
-PKG_CFLAGS = -std=c++11 -O0 -g -fPIC\
+PKG_CFLAGS = -std=c++11 -O3 -g -fPIC\
 	-Iinclude\
 	-I${TVM_ROOT}/include\
 	-I${DMLC_CORE}/include\

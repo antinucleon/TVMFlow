@@ -504,6 +504,18 @@ Schedule ScheduleSoftmax(const NodeAttrs& attrs, const Array<Tensor>& outs,
   return pf(outs, target);
 }
 
+Schedule ScheduleGlobalPool(const NodeAttrs& attrs, const Array<Tensor>& outs,
+                            const std::string& target) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.global_pool");
+  return pf(outs, target);
+}
+
+Schedule ScheduleGlobalPoolBwd(const NodeAttrs& attrs, const Array<Tensor>& outs,
+                               const std::string& target) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.global_pool_bwd");
+  return pf(outs, target);
+}
+
 Schedule ScheduleBroadcast(const NodeAttrs& attrs, const Array<Tensor>& outs,
                            const std::string& target) {
   static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.broadcast");

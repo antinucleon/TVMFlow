@@ -236,6 +236,25 @@ def schedule_reduction(outs, target):
     return s
 
 
+@tvm.register_func("tvm_graph.schedule.global_pool")
+def schedule_global_pool(outs, target):
+    s = tvm.create_schedule([x.op for x in outs])
+    if target == "metal":
+        print outs
+
+    return s
+
+
+@tvm.register_func("tvm_graph.schedule.global_pool_bwd")
+def schedule_global_pool_bwd(outs, target):
+    s = tvm.create_schedule([x.op for x in outs])
+    if target == "metal":
+        gp = outs[0]
+        tmp = outs[0].op.input_tensors[0]
+        s[gp].compute_inline()
+    return s
+
+
 @tvm.register_func("tvm_graph.schedule.softmax_bwd")
 def schedule_softmax_bwd(outs, target):
     s = tvm.create_schedule([x.op for x in outs])

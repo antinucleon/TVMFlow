@@ -7,6 +7,7 @@ namespace tvmflow {
 class TVMSession : public Session {
  public:
   explicit TVMSession(const std::string& option) {
+    /*
     if (option.find("metal") != std::string::npos) {
       ctx_.device_type = kMetal;
       ctx_.device_id = 0;
@@ -30,6 +31,22 @@ class TVMSession : public Session {
     } else {
       LOG(FATAL) << "Other format is not supported so far";
     }
+    */
+    std::istringstream iss(option);
+    std::vector<std::string> tokens{std::istream_iterator<std::string>{iss},
+                                    std::istream_iterator<std::string>{}};
+    LOG(INFO) << "Use Device: " << tokens[0] << "[" << tokens[1] << "]";
+    if (tokens[0] == "metal") {
+      ctx_.device_type = kMetal;
+    } else if (tokens[0] == "opencl") {
+      ctx_.device_type = kOpenCL;
+    } else {
+      ctx_.device_type = kCPU;
+    }
+    ctx_.device_id = atoi(tokens[1].c_str());
+    dtype_.code = kFloat;
+    dtype_.bits = 32;
+    dtype_.lanes = 1;
   }
   const std::vector<DLTensor*>& Run(Symbol* g,
                                     const std::unordered_map<std::string, DLTensor>& inputs);

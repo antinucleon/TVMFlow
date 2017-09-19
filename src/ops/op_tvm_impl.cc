@@ -15,7 +15,7 @@ using tvm::Tensor;
 using tvm::runtime::PackedFunc;
 
 NNVM_REGISTER_OP_GROUP(ElementwiseOpAttr)
-    .set_attr<TOpPattern>("TOpPattern", kBroadcast)
+    .set_attr<TOpPattern>("TOpPattern", kExtern)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleEWise)
     .set_attr<nnvm::FInferShape>("FInferShape", SameShape);
 
@@ -655,6 +655,36 @@ NNVM_REGISTER_OP(_bias4d_bwd)
     .set_attr<FTVMCompute>("FTVMCompute", ComputeBiasBwd)
     .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleReduction)
     .set_attr<int>("TOpPattern", kComplex)
+    .set_attr<nnvm::TIsBackward>("TIsBackward", true);
+
+NNVM_REGISTER_OP(slice_gate)
+    .set_num_inputs(1)
+    .set_num_outputs(4)
+    .set_attr<TOpPattern>("TOpPattern", kBroadcast)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleSlice)
+    .set_attr<nnvm::FInferShape>("FInferShape",
+                                 [](const NodeAttrs& attrs, std::vector<TShape>* ishape,
+                                    std::vector<TShape>* oshape) {
+                                   CHECK_EQ(ishape->size(), 1);
+                                   if (ishape->at(0).ndim() == 0) return false;
+                                   TShape pshape{ishape->at(0)[0] / 4, ishape->at(0)[1]};
+                                   SHAPE_ASSIGN(oshape->at(0), pshape);
+                                   SHAPE_ASSIGN(oshape->at(1), pshape);
+                                   SHAPE_ASSIGN(oshape->at(2), pshape);
+                                   SHAPE_ASSIGN(oshape->at(3), pshape);
+                                   return true;
+                                 })
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeSliceGate)
+    .set_attr<FGradient>("FGradient", [](const NodePtr& n, const std::vector<NodeEntry>& ograds) {
+      return MakeBackwardGrads("_slice_bwd", n, {ograds[0], ograds[1], ograds[2], ograds[3]});
+    });
+
+NNVM_REGISTER_OP(_slice_bwd)
+    .set_num_inputs(4)
+    .set_num_outputs(1)
+    .set_attr<FTVMCompute>("FTVMCompute", ComputeSliceGateBwd)
+    .set_attr<FTVMSchedule>("FTVMSchedule", ScheduleSliceBwd)
+    .set_attr<int>("TOpPattern", kBroadcast)
     .set_attr<nnvm::TIsBackward>("TIsBackward", true);
 
 }  // namespace tvmflow

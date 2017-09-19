@@ -23,8 +23,8 @@ class AdamOptimizer(object):
                  epsilon=1e-04,
                  name='Adam'):
         self.name = name
-        self.t = _base.Variable(_sym.zeros(
-            shape=[1], dtype=_base.float32), name + '_t')
+        self.t = _base.Variable(
+            _sym.zeros(shape=[1], dtype=_base.float32), name + '_t')
         self.learning_rate = learning_rate
         self.beta1 = beta1
         self.beta2 = beta2

@@ -195,7 +195,7 @@ def schedule_matmul(outs, target):
         tx, xi = s[BB].split(xi, nparts=num_thread)
         s[BB].bind(ty, thread_y)
         s[BB].bind(tx, thread_x)
-        s[BB].vectorize(xi)
+        #s[BB].vectorize(xi)
 
     def traverse(OP):
         """Traverse operators from computation graph"""
@@ -252,6 +252,7 @@ def schedule_global_pool_bwd(outs, target):
         gp = outs[0]
         tmp = outs[0].op.input_tensors[0]
         s[gp].compute_inline()
+
     return s
 
 

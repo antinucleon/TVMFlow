@@ -458,6 +458,26 @@ Array<Tensor> ComputeGlobalPoolBwd(const NodeAttrs& attrs, const Array<Tensor>& 
   return {ret};
 }
 
+Array<Tensor> ComputeSliceGate(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.slice4");
+  CHECK_EQ(inputs.size(), 1);
+  Tensor tmp = pf(inputs[0]);
+  static const PackedFunc& gf = GetPackedFunc("tvm_graph.compute.get4");
+  Tensor d0 = gf(tmp, 0);
+  Tensor d1 = gf(tmp, 1);
+  Tensor d2 = gf(tmp, 2);
+  Tensor d3 = gf(tmp, 3);
+  return {d0, d1, d2, d3};
+}
+
+Array<Tensor> ComputeSliceGateBwd(const NodeAttrs& attrs, const Array<Tensor>& inputs) {
+  CHECK_EQ(inputs.size(), 4);
+  static const PackedFunc& gf = GetPackedFunc("tvm_graph.compute.get4_bwd");
+  Tensor tmp = gf(inputs[0], inputs[1], inputs[2], inputs[3]);
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.compute.slice4_bwd");
+  Tensor ret = pf(tmp);
+  return {ret};
+}
 /**************************************************
  *   Schedule
  **************************************************/
@@ -519,6 +539,18 @@ Schedule ScheduleGlobalPoolBwd(const NodeAttrs& attrs, const Array<Tensor>& outs
 Schedule ScheduleBroadcast(const NodeAttrs& attrs, const Array<Tensor>& outs,
                            const std::string& target) {
   static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.broadcast");
+  return pf(outs, target);
+}
+
+Schedule ScheduleSlice(const NodeAttrs& attrs, const Array<Tensor>& outs,
+                       const std::string& target) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.slice");
+  return pf(outs, target);
+}
+
+Schedule ScheduleSliceBwd(const NodeAttrs& attrs, const Array<Tensor>& outs,
+                          const std::string& target) {
+  static const PackedFunc& pf = GetPackedFunc("tvm_graph.schedule.slice_bwd");
   return pf(outs, target);
 }
 }  // namespace tvmflow

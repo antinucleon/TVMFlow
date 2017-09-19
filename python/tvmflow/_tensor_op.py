@@ -480,3 +480,33 @@ def compute_bias_bwd(outgrad, bias):
 @tvm.register_func("tvm_graph.compute.indentity")
 def compute_indentity(data):
     return tvm.compute(data.shape, lambda *i: data(*i), tag="ewise")
+
+
+@tvm.register_func("tvm_graph.compute.slice4")
+def compute_slice4(data):
+    m, n = data.shape
+    s = m // 4
+    return tvm.compute((4, s, n), lambda i, j, k: data[i * s + j, k])
+
+
+@tvm.register_func("tvm_graph.compute.slice4_bwd")
+def compute_slice4_bwd(data):
+    m, s, n = data.shape
+    return tvm.compute((m * s, n), lambda i, j: data[i // s, i % s, j])
+
+
+@tvm.register_func("tvm_graph.compute.get4")
+def compute_get4(data, k):
+    m, s, n = data.shape
+    return tvm.compute((s, n), lambda i, j: data[k, i, j])
+
+
+@tvm.register_func("tvm_graph.compute.get4_bwd")
+def compute_get4_bwd(d0, d1, d2, d3):
+    s, n = d0.shape
+    return tvm.compute((4, s, n), lambda i, j, k:
+        tvm.select(i <= 0, d0[j ,k],
+            tvm.select(i <=1, d1[j, k],
+                tvm.select(i <= 2, d2[j, k],
+                    tvm.select(i <=3, d3[j, k], 0.))))
+    )
